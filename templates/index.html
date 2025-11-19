@@ -446,7 +446,7 @@
             });
         });
 
-        // Generate fix suggestions
+        // Generate fix and run full auto-fix (generate patch -> apply -> create PR)
         document.getElementById('fixBtn').addEventListener('click', function() {
             if (!currentIssueData) {
                 showAlert('No issue data available');
@@ -455,27 +455,61 @@
 
             toggleLoading('fixBtn', true);
 
-            fetch('/fix_issue', {
+            // Step 1: generate patch
+            fetch('/generate_fix_patch', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ issue_data: currentIssueData })
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
-                toggleLoading('fixBtn', false);
-                
-                if (data.success) {
-                    displayFixSuggestions(data.fix_suggestions);
-                    showAlert('Fix suggestions generated successfully!', 'success');
-                } else {
-                    showAlert(data.error);
+                if (!data.success) {
+                    toggleLoading('fixBtn', false);
+                    showAlert(data.error || 'Failed to generate patch');
+                    return;
                 }
+
+                const result = data.result || {};
+                const patch = result.patch || '';
+
+                if (!patch || patch.trim().length === 0) {
+                    toggleLoading('fixBtn', false);
+                    showAlert('LLM did not produce a patch to apply');
+                    return;
+                }
+
+                // Optional: show modal preview
+                document.getElementById('patchMeta').textContent = JSON.stringify(result.meta || {}, null, 2);
+                document.getElementById('patchContent').textContent = patch;
+                var autoFixModal = new bootstrap.Modal(document.getElementById('autoFixModal'));
+                autoFixModal.show();
+
+                // Step 2: apply patch and create PR (automatic)
+                return fetch('/apply_patch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patch: patch, commit_message: `fix(${currentIssueData.key || 'AUTO'}): apply LLM patch`, issue_data: currentIssueData })
+                })
+                .then(r2 => r2.json())
+                .then(resp => {
+                    toggleLoading('fixBtn', false);
+                    if (resp.success) {
+                        const prUrl = resp.pr_url || resp.url;
+                        showAlert('Patch applied and PR created: ' + prUrl, 'success');
+                        // update modal with PR link
+                        document.getElementById('patchMeta').textContent = JSON.stringify({ pr_url: prUrl, branch: resp.branch }, null, 2);
+                    } else {
+                        showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
+                    }
+                })
+                .catch(err => {
+                    toggleLoading('fixBtn', false);
+                    showAlert('Apply patch error: ' + err.message);
+                });
             })
-            .catch(error => {
+            .catch(err => {
                 toggleLoading('fixBtn', false);
-                showAlert('An error occurred while generating fix suggestions: ' + error.message);
+                showAlert('Auto-fix error: ' + err.message);
             });
         });
 
