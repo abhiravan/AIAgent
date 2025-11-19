@@ -70,6 +70,51 @@ def fix_issue():
         'fix_suggestions': fix_suggestions
     })
 
+@app.route('/analyze_issue', methods=['POST'])
+def analyze_issue():
+    """Analyze issue using AI and GitHub context"""
+    try:
+        from ai_service import AIService
+        from github_service import GitHubService
+        
+        data = request.get_json()
+        issue_data = data.get('issue_data')
+        
+        if not issue_data:
+            return jsonify({'success': False, 'error': 'No issue data provided'})
+        
+        # Initialize services
+        ai_service = AIService()
+        github_service = GitHubService()
+        
+        # Get repository files for context
+        repo_files = github_service.get_repository_files()
+        
+        # Analyze issue with AI
+        analysis_result = ai_service.analyze_issue_with_context(
+            issue_data=issue_data,
+            repo_files=repo_files
+        )
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis_result
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/test_github', methods=['GET'])
+def test_github():
+    """Test GitHub connection"""
+    try:
+        from github_service import GitHubService
+        github_service = GitHubService()
+        result = github_service.test_connection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 def generate_fix_suggestions(issue_data):
     """Generate fix suggestions based on issue content"""
     summary = issue_data.get('summary', '').lower()
