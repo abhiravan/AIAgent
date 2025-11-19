@@ -267,6 +267,13 @@ def apply_patch_route():
 
             changed_files = naive_apply(patch_text)
 
+            # Stage and commit the naive-applied files
+            if changed_files:
+                subprocess.run('git add ' + ' '.join([shlex.quote(f) for f in changed_files]), shell=True, cwd=os.getcwd())
+                commit = subprocess.run(f'git commit -m "{commit_message}"', shell=True, cwd=os.getcwd(), capture_output=True, text=True)
+                if commit.returncode != 0:
+                    return jsonify({'success': False, 'error': f'git commit failed for naive apply: {commit.stderr}'})
+
         if not changed_files:
             return jsonify({'success': False, 'error': 'No files were changed by the patch or git apply failed.'})
 
