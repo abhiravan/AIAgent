@@ -4,10 +4,12 @@ A web-based tool for fetching Jira issues and generating intelligent fix suggest
 
 ## Features
 
-- **Fetch Jira Issues**: Enter a Jira issue key to retrieve detailed issue information
-- **Smart Analysis**: Display comprehensive issue details including summary, description, status, and metadata
-- **Fix Suggestions**: Generate intelligent fix recommendations based on issue content and patterns
-- **Secure Token Handling**: Environment variable-based configuration for sensitive data
+- **🔍 Fetch Jira Issues**: Enter a Jira issue key to retrieve detailed issue information
+- **🧠 Smart Analysis**: Display comprehensive issue details including summary, description, status, and metadata
+- **🛠️ Fix Suggestions**: Generate intelligent fix recommendations based on issue content and patterns
+- **🔐 Secure Configuration**: Environment variable-based configuration for sensitive data
+- **🧩 Modular Architecture**: Separate Jira service module for clean code organization
+- **🔌 Connection Testing**: Built-in Jira connectivity verification
 
 ## Installation
 
@@ -81,6 +83,21 @@ Key environment variables:
 - `JIRA_TOKEN`: API token from Jira (not your password)
 - `FLASK_SECRET_KEY`: Secret key for Flask sessions
 
+## Architecture
+
+### Service Layer
+- **`jira_service.py`**: Dedicated Jira API service module
+  - Handles authentication and API calls
+  - Formats issue data consistently
+  - Includes connection testing and error handling
+  - Modular design for easy testing and maintenance
+
+### Web Layer  
+- **`fetch_and_fix_agent.py`**: Flask web application
+  - Routes and request handling
+  - Uses Jira service for all API operations
+  - Fix suggestion generation logic
+
 ## Development
 
 To run in development mode:
@@ -90,3 +107,9 @@ python fetch_and_fix_agent.py
 ```
 
 The application will run with debug mode enabled and auto-reload on file changes.
+
+### Testing Jira Connection
+Use the "Test Jira Connection" button in the UI or call:
+```bash
+curl http://localhost:5000/test_connection
+```

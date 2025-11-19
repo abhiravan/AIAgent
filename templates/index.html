@@ -10,7 +10,7 @@
         .hero-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 60px 0;
+            padding: 25px 0;
         }
         .issue-card {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -20,13 +20,28 @@
         .fix-suggestion {
             background: #f8f9fa;
             border-left: 4px solid #007bff;
-            padding: 15px;
-            margin: 10px 0;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 0 4px 4px 0;
         }
         .priority-critical { border-left-color: #dc3545 !important; }
         .priority-high { border-left-color: #fd7e14 !important; }
         .priority-medium { border-left-color: #ffc107 !important; }
         .priority-low { border-left-color: #28a745 !important; }
+        .compact-field {
+            margin-bottom: 8px;
+        }
+        .compact-field small {
+            font-size: 0.75rem;
+            margin-bottom: 2px;
+        }
+        .issue-card {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .card-body.p-3 {
+            padding: 1rem !important;
+        }
         .loading-spinner {
             display: none;
         }
@@ -41,39 +56,47 @@
 <body>
     <div class="hero-section">
         <div class="container text-center">
-            <h1 class="display-4 mb-3">
-                <i class="bi bi-bug-fill me-3"></i>
+            <h2 class="mb-2">
+                <i class="bi bi-bug-fill me-2"></i>
                 Fetch and Fix Agent
-            </h1>
-            <p class="lead">Intelligent Jira issue analysis and fix suggestions</p>
+            </h2>
+            <p class="mb-0">Intelligent Jira issue analysis and fix suggestions</p>
         </div>
     </div>
 
-    <div class="container mt-5">
+    <div class="container mt-3">
         <!-- Input Section -->
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card issue-card">
                     <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="bi bi-search me-2"></i>Fetch Jira Issue</h5>
+                        <h6 class="mb-0"><i class="bi bi-search me-2"></i>Fetch Jira Issue</h6>
                     </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="issueKey" class="form-label">Jira Issue Key</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-ticket"></i></span>
-                                <input type="text" class="form-control" id="issueKey" 
-                                       placeholder="Enter Jira issue key (e.g., PROJ-123)" 
-                                       autocomplete="off">
-                                <button class="btn btn-primary" type="button" id="fetchBtn">
-                                    <span class="btn-text">Fetch Issue</span>
-                                    <span class="loading-spinner">
-                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                        Fetching...
-                                    </span>
-                                </button>
-                            </div>
+                    <div class="card-body p-3">
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="bi bi-ticket"></i></span>
+                            <input type="text" class="form-control" id="issueKey" 
+                                   placeholder="Enter issue key (e.g., PROJ-123)" 
+                                   autocomplete="off">
+                            <button class="btn btn-primary" type="button" id="fetchBtn">
+                                <span class="btn-text">Fetch</span>
+                                <span class="loading-spinner">
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    Fetching...
+                                </span>
+                            </button>
                         </div>
+                        <div class="text-center">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" id="testConnectionBtn">
+                                <i class="bi bi-wifi me-1"></i>
+                                <span class="btn-text">Test Connection</span>
+                                <span class="loading-spinner">
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    Testing...
+                                </span>
+                            </button>
+                        </div>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -88,43 +111,76 @@
 
         <!-- Issue Details Section -->
         <div class="row justify-content-center issue-details">
-            <div class="col-md-10">
+            <div class="col-md-8">
                 <div class="card issue-card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Issue Details</h5>
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Issue Details</h6>
+                        <span id="issueKeyBadge" class="badge bg-light text-dark"></span>
                     </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6 class="text-muted">Issue Key</h6>
-                                <p id="issueKeyDisplay" class="fw-bold"></p>
-                                
-                                <h6 class="text-muted">Status</h6>
-                                <p id="issueStatus"></p>
-                                
-                                <h6 class="text-muted">Priority</h6>
-                                <p id="issuePriority"></p>
+                    <div class="card-body p-3">
+                        <!-- Issue Key and Assignee Line -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <small class="text-muted">Issue Key:</small>
+                                <span id="issueKeyDisplay" class="fw-bold text-primary ms-1"></span>
                             </div>
-                            <div class="col-md-6">
-                                <h6 class="text-muted">Assignee</h6>
-                                <p id="issueAssignee"></p>
-                                
-                                <h6 class="text-muted">Created</h6>
-                                <p id="issueCreated"></p>
-                                
-                                <h6 class="text-muted">Updated</h6>
-                                <p id="issueUpdated"></p>
+                            <div>
+                                <small class="text-muted">Assignee:</small>
+                                <span id="issueAssignee" class="fw-semibold ms-1"></span>
+                            </div>
+                        </div>
+
+                        <!-- Compact Issue Summary -->
+                        <div class="mb-3">
+                            <h6 id="issueSummary" class="fw-bold mb-2 text-dark"></h6>
+                        </div>
+                        
+                        <!-- Reporter and Status/Priority/Type Line -->
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                            <div class="text-start">
+                                <small class="text-muted d-block">Reporter</small>
+                                <small id="issueReporter" class="fw-semibold"></small>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Status</small>
+                                    <span id="issueStatus" class="badge bg-secondary"></span>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Priority</small>
+                                    <span id="issuePriority" class="badge bg-warning text-dark"></span>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Type</small>
+                                    <span id="issueType" class="badge bg-info"></span>
+                                </div>
                             </div>
                         </div>
                         
-                        <h6 class="text-muted mt-3">Summary</h6>
-                        <p id="issueSummary" class="fw-bold"></p>
+                        <!-- Dates Line -->
+                        <div class="d-flex justify-content-between mb-3">
+                            <div>
+                                <small class="text-muted">Created:</small>
+                                <small id="issueCreated" class="ms-1"></small>
+                            </div>
+                            <div>
+                                <small class="text-muted">Updated:</small>
+                                <small id="issueUpdated" class="ms-1"></small>
+                            </div>
+                        </div>
                         
-                        <h6 class="text-muted mt-3">Description</h6>
-                        <div id="issueDescription" class="border p-3 bg-light rounded"></div>
+                        <!-- Collapsible Description -->
+                        <div class="mb-3">
+                            <button class="btn btn-outline-secondary btn-sm w-100" type="button" data-bs-toggle="collapse" data-bs-target="#descriptionCollapse">
+                                <i class="bi bi-chevron-down me-1"></i> Description
+                            </button>
+                            <div class="collapse mt-2" id="descriptionCollapse">
+                                <div id="issueDescription" class="border p-2 bg-light rounded small"></div>
+                            </div>
+                        </div>
                         
-                        <div class="mt-4 text-center">
-                            <button class="btn btn-success btn-lg" id="fixBtn">
+                        <div class="text-center">
+                            <button class="btn btn-success" id="fixBtn">
                                 <i class="bi bi-tools me-2"></i>
                                 <span class="btn-text">Generate Fix Suggestions</span>
                                 <span class="loading-spinner">
@@ -140,12 +196,12 @@
 
         <!-- Fix Suggestions Section -->
         <div class="row justify-content-center fix-suggestions">
-            <div class="col-md-10">
+            <div class="col-md-8">
                 <div class="card issue-card">
                     <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Fix Suggestions</h5>
+                        <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Fix Suggestions</h6>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-3">
                         <div id="fixSuggestionsContainer"></div>
                     </div>
                 </div>
@@ -237,16 +293,54 @@
 
         // Display issue details
         function displayIssueDetails(issue) {
+            document.getElementById('issueKeyBadge').textContent = issue.key;
             document.getElementById('issueKeyDisplay').textContent = issue.key;
             document.getElementById('issueSummary').textContent = issue.summary;
             document.getElementById('issueDescription').textContent = issue.description;
-            document.getElementById('issueStatus').textContent = issue.status;
+            
+            // Update status badge with appropriate color
+            const statusElement = document.getElementById('issueStatus');
+            statusElement.textContent = issue.status;
+            statusElement.className = `badge ${getStatusBadgeColor(issue.status)}`;
+            
+            // Update priority badge
+            const priorityElement = document.getElementById('issuePriority');
+            priorityElement.textContent = issue.priority;
+            priorityElement.className = `badge ${getPriorityBadgeColor(issue.priority)}`;
+            
+            // Update type badge
+            const typeElement = document.getElementById('issueType');
+            typeElement.textContent = issue.issue_type || 'Task';
+            typeElement.className = 'badge bg-info';
+            
             document.getElementById('issueAssignee').textContent = issue.assignee;
-            document.getElementById('issuePriority').textContent = issue.priority;
-            document.getElementById('issueCreated').textContent = formatDate(issue.created);
-            document.getElementById('issueUpdated').textContent = formatDate(issue.updated);
+            document.getElementById('issueReporter').textContent = issue.reporter || 'Unknown';
+            document.getElementById('issueCreated').textContent = formatDateCompact(issue.created);
+            document.getElementById('issueUpdated').textContent = formatDateCompact(issue.updated);
             
             document.querySelector('.issue-details').style.display = 'block';
+        }
+
+        function getStatusBadgeColor(status) {
+            const statusColors = {
+                'To Do': 'bg-secondary',
+                'In Progress': 'bg-primary',
+                'Done': 'bg-success',
+                'Closed': 'bg-success',
+                'Open': 'bg-warning text-dark',
+                'Resolved': 'bg-success',
+                'Reopened': 'bg-warning text-dark'
+            };
+            return statusColors[status] || 'bg-secondary';
+        }
+
+        function formatDateCompact(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: '2-digit'
+            });
         }
 
         // Generate fix suggestions
@@ -289,17 +383,17 @@
 
             suggestions.forEach((suggestion, index) => {
                 const priorityClass = `priority-${suggestion.priority.toLowerCase()}`;
+                const badgeColor = getPriorityBadgeColorClass(suggestion.priority);
                 const suggestionHtml = `
-                    <div class="fix-suggestion ${priorityClass}">
-                        <h6 class="fw-bold text-primary">
-                            <i class="bi bi-gear-fill me-2"></i>
-                            ${suggestion.type}
-                            <span class="badge bg-${getPriorityBadgeColor(suggestion.priority)} ms-2">
-                                ${suggestion.priority} Priority
-                            </span>
-                        </h6>
-                        <ul class="mb-0">
-                            ${suggestion.suggestions.map(s => `<li>${s}</li>`).join('')}
+                    <div class="fix-suggestion ${priorityClass} mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold text-primary mb-0">
+                                <i class="bi bi-gear-fill me-2"></i>${suggestion.type}
+                            </h6>
+                            <span class="badge ${badgeColor}">${suggestion.priority}</span>
+                        </div>
+                        <ul class="mb-0 small">
+                            ${suggestion.suggestions.map(s => `<li class="mb-1">${s}</li>`).join('')}
                         </ul>
                     </div>
                 `;
@@ -307,6 +401,16 @@
             });
 
             document.querySelector('.fix-suggestions').style.display = 'block';
+        }
+
+        function getPriorityBadgeColorClass(priority) {
+            const colors = {
+                'Critical': 'bg-danger',
+                'High': 'bg-warning text-dark',
+                'Medium': 'bg-info',
+                'Low': 'bg-success'
+            };
+            return colors[priority] || 'bg-secondary';
         }
 
         function getPriorityBadgeColor(priority) {
@@ -318,6 +422,27 @@
             };
             return colors[priority] || 'secondary';
         }
+
+        // Test Jira connection
+        document.getElementById('testConnectionBtn').addEventListener('click', function() {
+            toggleLoading('testConnectionBtn', true);
+
+            fetch('/test_connection')
+            .then(response => response.json())
+            .then(data => {
+                toggleLoading('testConnectionBtn', false);
+                
+                if (data.success) {
+                    showAlert(`✅ Connection successful! Logged in as: ${data.user}`, 'success');
+                } else {
+                    showAlert(`❌ Connection failed: ${data.error}`, 'danger');
+                }
+            })
+            .catch(error => {
+                toggleLoading('testConnectionBtn', false);
+                showAlert('Connection test failed: ' + error.message, 'danger');
+            });
+        });
 
         // Allow Enter key to fetch issue
         document.getElementById('issueKey').addEventListener('keypress', function(e) {

@@ -3,10 +3,8 @@ Fetch and Fix Agent - A web UI for fetching Jira issues and generating fixes
 """
 
 import os
-import requests
-from flask import Flask, render_template, request, jsonify, flash
-import base64
-import json
+from flask import Flask, render_template, request, jsonify
+from jira_service import JiraService
 from datetime import datetime
 
 app = Flask(__name__)
@@ -19,19 +17,12 @@ try:
 except ImportError:
     print("python-dotenv not installed. Using system environment variables only.")
 
-# Jira configuration - these MUST be set as environment variables
-JIRA_BASE_URL = os.environ.get('JIRA_BASE_URL')
-JIRA_EMAIL = os.environ.get('JIRA_EMAIL')
-JIRA_TOKEN = os.environ.get('JIRA_TOKEN')
-
-# Validate required environment variables
-if not all([JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN]):
-    missing_vars = []
-    if not JIRA_BASE_URL: missing_vars.append('JIRA_BASE_URL')
-    if not JIRA_EMAIL: missing_vars.append('JIRA_EMAIL')
-    if not JIRA_TOKEN: missing_vars.append('JIRA_TOKEN')
-    
-    print(f"ERROR: Missing required environment variables: {', '.join(missing_vars)}")
+# Initialize Jira service
+try:
+    jira_service = JiraService()
+    print("✅ Jira service initialized successfully")
+except ValueError as e:
+    print(f"❌ ERROR: {e}")
     print("Please set these environment variables:")
     print("  JIRA_BASE_URL=https://your-domain.atlassian.net")
     print("  JIRA_EMAIL=your-email@example.com")
@@ -39,67 +30,16 @@ if not all([JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN]):
     print("Or create a .env file with these variables.")
     exit(1)
 
-class JiraClient:
-    """Handle Jira API interactions"""
-    
-    def __init__(self, base_url, email, token):
-        self.base_url = base_url.rstrip('/')
-        self.email = email
-        self.token = token
-        self.auth_header = self._create_auth_header()
-    
-    def _create_auth_header(self):
-        """Create Basic Auth header for Jira API"""
-        auth_string = f"{self.email}:{self.token}"
-        auth_bytes = auth_string.encode('ascii')
-        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
-        return f"Basic {auth_b64}"
-    
-    def fetch_issue(self, issue_key):
-        """Fetch issue details from Jira"""
-        try:
-            url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
-            headers = {
-                'Authorization': self.auth_header,
-                'Accept': 'application/json'
-            }
-            
-            response = requests.get(url, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                issue_data = response.json()
-                return {
-                    'success': True,
-                    'data': {
-                        'key': issue_data['key'],
-                        'summary': issue_data['fields']['summary'],
-                        'description': issue_data['fields'].get('description', {}).get('content', [{}])[0].get('content', [{}])[0].get('text', 'No description available'),
-                        'status': issue_data['fields']['status']['name'],
-                        'assignee': issue_data['fields']['assignee']['displayName'] if issue_data['fields']['assignee'] else 'Unassigned',
-                        'priority': issue_data['fields']['priority']['name'] if issue_data['fields']['priority'] else 'None',
-                        'created': issue_data['fields']['created'],
-                        'updated': issue_data['fields']['updated']
-                    }
-                }
-            elif response.status_code == 404:
-                return {'success': False, 'error': f'Issue {issue_key} not found'}
-            elif response.status_code == 401:
-                return {'success': False, 'error': 'Authentication failed. Please check credentials.'}
-            else:
-                return {'success': False, 'error': f'Failed to fetch issue: {response.status_code}'}
-                
-        except requests.exceptions.RequestException as e:
-            return {'success': False, 'error': f'Connection error: {str(e)}'}
-        except Exception as e:
-            return {'success': False, 'error': f'Unexpected error: {str(e)}'}
-
-# Initialize Jira client
-jira_client = JiraClient(JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN)
-
 @app.route('/')
 def index():
     """Main page with the Fetch and Fix Agent interface"""
     return render_template('index.html')
+
+@app.route('/test_connection', methods=['GET'])
+def test_connection():
+    """Test Jira connection"""
+    result = jira_service.test_connection()
+    return jsonify(result)
 
 @app.route('/fetch_issue', methods=['POST'])
 def fetch_issue():
@@ -110,7 +50,7 @@ def fetch_issue():
     if not issue_key:
         return jsonify({'success': False, 'error': 'Please provide a Jira issue key'})
     
-    result = jira_client.fetch_issue(issue_key)
+    result = jira_service.get_issue(issue_key)
     return jsonify(result)
 
 @app.route('/fix_issue', methods=['POST'])
