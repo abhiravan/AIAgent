@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fetch and Fix Agent</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 0;
+        }
+        .issue-card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        .fix-suggestion {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .priority-critical { border-left-color: #dc3545 !important; }
+        .priority-high { border-left-color: #fd7e14 !important; }
+        .priority-medium { border-left-color: #ffc107 !important; }
+        .priority-low { border-left-color: #28a745 !important; }
+        .loading-spinner {
+            display: none;
+        }
+        .issue-details {
+            display: none;
+        }
+        .fix-suggestions {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-3">
+                <i class="bi bi-bug-fill me-3"></i>
+                Fetch and Fix Agent
+            </h1>
+            <p class="lead">Intelligent Jira issue analysis and fix suggestions</p>
+        </div>
+    </div>
+
+    <div class="container mt-5">
+        <!-- Input Section -->
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card issue-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-search me-2"></i>Fetch Jira Issue</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="issueKey" class="form-label">Jira Issue Key</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-ticket"></i></span>
+                                <input type="text" class="form-control" id="issueKey" 
+                                       placeholder="Enter Jira issue key (e.g., PROJ-123)" 
+                                       autocomplete="off">
+                                <button class="btn btn-primary" type="button" id="fetchBtn">
+                                    <span class="btn-text">Fetch Issue</span>
+                                    <span class="loading-spinner">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        Fetching...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Section -->
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div id="alertContainer"></div>
+            </div>
+        </div>
+
+        <!-- Issue Details Section -->
+        <div class="row justify-content-center issue-details">
+            <div class="col-md-10">
+                <div class="card issue-card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Issue Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Issue Key</h6>
+                                <p id="issueKeyDisplay" class="fw-bold"></p>
+                                
+                                <h6 class="text-muted">Status</h6>
+                                <p id="issueStatus"></p>
+                                
+                                <h6 class="text-muted">Priority</h6>
+                                <p id="issuePriority"></p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Assignee</h6>
+                                <p id="issueAssignee"></p>
+                                
+                                <h6 class="text-muted">Created</h6>
+                                <p id="issueCreated"></p>
+                                
+                                <h6 class="text-muted">Updated</h6>
+                                <p id="issueUpdated"></p>
+                            </div>
+                        </div>
+                        
+                        <h6 class="text-muted mt-3">Summary</h6>
+                        <p id="issueSummary" class="fw-bold"></p>
+                        
+                        <h6 class="text-muted mt-3">Description</h6>
+                        <div id="issueDescription" class="border p-3 bg-light rounded"></div>
+                        
+                        <div class="mt-4 text-center">
+                            <button class="btn btn-success btn-lg" id="fixBtn">
+                                <i class="bi bi-tools me-2"></i>
+                                <span class="btn-text">Generate Fix Suggestions</span>
+                                <span class="loading-spinner">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    Analyzing...
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fix Suggestions Section -->
+        <div class="row justify-content-center fix-suggestions">
+            <div class="col-md-10">
+                <div class="card issue-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Fix Suggestions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="fixSuggestionsContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+        <div class="container">
+            <p class="mb-0">&copy; 2025 Fetch and Fix Agent - Intelligent Issue Resolution</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentIssueData = null;
+
+        // Utility functions
+        function showAlert(message, type = 'danger') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alert);
+        }
+
+        function toggleLoading(buttonId, isLoading) {
+            const button = document.getElementById(buttonId);
+            const btnText = button.querySelector('.btn-text');
+            const loadingSpinner = button.querySelector('.loading-spinner');
+            
+            if (isLoading) {
+                btnText.style.display = 'none';
+                loadingSpinner.style.display = 'inline';
+                button.disabled = true;
+            } else {
+                btnText.style.display = 'inline';
+                loadingSpinner.style.display = 'none';
+                button.disabled = false;
+            }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        // Fetch issue functionality
+        document.getElementById('fetchBtn').addEventListener('click', function() {
+            const issueKey = document.getElementById('issueKey').value.trim();
+            
+            if (!issueKey) {
+                showAlert('Please enter a Jira issue key');
+                return;
+            }
+
+            toggleLoading('fetchBtn', true);
+            document.querySelector('.issue-details').style.display = 'none';
+            document.querySelector('.fix-suggestions').style.display = 'none';
+
+            fetch('/fetch_issue', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ issue_key: issueKey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                toggleLoading('fetchBtn', false);
+                
+                if (data.success) {
+                    currentIssueData = data.data;
+                    displayIssueDetails(data.data);
+                    showAlert('Issue fetched successfully!', 'success');
+                } else {
+                    showAlert(data.error);
+                }
+            })
+            .catch(error => {
+                toggleLoading('fetchBtn', false);
+                showAlert('An error occurred while fetching the issue: ' + error.message);
+            });
+        });
+
+        // Display issue details
+        function displayIssueDetails(issue) {
+            document.getElementById('issueKeyDisplay').textContent = issue.key;
+            document.getElementById('issueSummary').textContent = issue.summary;
+            document.getElementById('issueDescription').textContent = issue.description;
+            document.getElementById('issueStatus').textContent = issue.status;
+            document.getElementById('issueAssignee').textContent = issue.assignee;
+            document.getElementById('issuePriority').textContent = issue.priority;
+            document.getElementById('issueCreated').textContent = formatDate(issue.created);
+            document.getElementById('issueUpdated').textContent = formatDate(issue.updated);
+            
+            document.querySelector('.issue-details').style.display = 'block';
+        }
+
+        // Generate fix suggestions
+        document.getElementById('fixBtn').addEventListener('click', function() {
+            if (!currentIssueData) {
+                showAlert('No issue data available');
+                return;
+            }
+
+            toggleLoading('fixBtn', true);
+
+            fetch('/fix_issue', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ issue_data: currentIssueData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                toggleLoading('fixBtn', false);
+                
+                if (data.success) {
+                    displayFixSuggestions(data.fix_suggestions);
+                    showAlert('Fix suggestions generated successfully!', 'success');
+                } else {
+                    showAlert(data.error);
+                }
+            })
+            .catch(error => {
+                toggleLoading('fixBtn', false);
+                showAlert('An error occurred while generating fix suggestions: ' + error.message);
+            });
+        });
+
+        // Display fix suggestions
+        function displayFixSuggestions(suggestions) {
+            const container = document.getElementById('fixSuggestionsContainer');
+            container.innerHTML = '';
+
+            suggestions.forEach((suggestion, index) => {
+                const priorityClass = `priority-${suggestion.priority.toLowerCase()}`;
+                const suggestionHtml = `
+                    <div class="fix-suggestion ${priorityClass}">
+                        <h6 class="fw-bold text-primary">
+                            <i class="bi bi-gear-fill me-2"></i>
+                            ${suggestion.type}
+                            <span class="badge bg-${getPriorityBadgeColor(suggestion.priority)} ms-2">
+                                ${suggestion.priority} Priority
+                            </span>
+                        </h6>
+                        <ul class="mb-0">
+                            ${suggestion.suggestions.map(s => `<li>${s}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                container.innerHTML += suggestionHtml;
+            });
+
+            document.querySelector('.fix-suggestions').style.display = 'block';
+        }
+
+        function getPriorityBadgeColor(priority) {
+            const colors = {
+                'Critical': 'danger',
+                'High': 'warning',
+                'Medium': 'info',
+                'Low': 'success'
+            };
+            return colors[priority] || 'secondary';
+        }
+
+        // Allow Enter key to fetch issue
+        document.getElementById('issueKey').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('fetchBtn').click();
+            }
+        });
+    </script>
+</body>
+</html>
