@@ -182,3 +182,66 @@ Please provide your analysis in JSON format with the following structure:
             'parsing_error': error,
             'note': 'This is a fallback analysis. Please review the raw_analysis field for detailed insights.'
         }
+
+    def generate_fix_patch(self, issue_data: Dict, repo_files: List[Dict]) -> Dict[str, Any]:
+        """Request the LLM to generate an apply_patch-style patch for a minimal fix.
+
+        Returns a dict with keys: success, patch, candidates, rationale, validation
+        """
+        try:
+            copilot_instructions = self._read_copilot_instructions()
+            prompt = self._build_patch_generation_prompt(issue_data, repo_files, copilot_instructions)
+            response = self._call_azure_openai(prompt)
+
+            # Expecting JSON + patch block; try to extract JSON first
+            # Look for an apply_patch block
+            patch = None
+            if '*** Begin Patch' in response:
+                patch_start = response.find('*** Begin Patch')
+                patch = response[patch_start:].strip()
+                json_part = response[:patch_start].strip()
+            else:
+                # Try to parse JSON from the response
+                json_part = response.strip()
+
+            try:
+                parsed = json.loads(json_part)
+            except Exception:
+                parsed = {'note': 'Could not parse JSON header from LLM response', 'raw': response}
+
+            return {
+                'success': True,
+                'patch': patch,
+                'meta': parsed
+            }
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _build_patch_generation_prompt(self, issue_data: Dict, repo_files: List[Dict], copilot_instructions: str) -> str:
+        """Build a conservative patch generation prompt following the repo's LLM strategy."""
+        files_list = json.dumps([f['path'] for f in repo_files[:50]], indent=2)
+
+        prompt = f'''
+You are a conservative, safety-first code repair agent. Follow these rules exactly:
+
+- Analyze the Jira issue below and the repository file list. Identify up to 3 candidate files to modify, with a confidence score (0.0-1.0) and brief reason for each.
+- If confidence for a chosen file is < 0.75, respond with action: request_more_info and list the required clarifications.
+- When producing a patch, make the minimal change needed to fix the issue. Modify at most 2 files if possible.
+- NEVER include secrets, tokens, credentials, or any values that look like API keys in the patch.
+- Output MUST be: a JSON header (with keys: candidates, chosen_file, rationale, validation, safety_checks) followed by an apply_patch-style block starting with '*** Begin Patch' and ending with '*** End Patch'.
+
+Jira Issue:
+- Key: {issue_data.get('key')}
+- Summary: {issue_data.get('summary')}
+- Description: {issue_data.get('description')}
+
+Repository files (top 50):
+{files_list}
+
+Copilot Instructions (truncated):
+{copilot_instructions[:2000]}
+
+Produce the JSON header and the patch. Keep changes minimal and focused. If multiple candidate fixes are plausible, provide them in 'candidates' but only include a patch for one 'chosen_file'.
+'''
+        return prompt

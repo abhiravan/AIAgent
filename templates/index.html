@@ -214,6 +214,14 @@
                                         Generating...
                                     </span>
                                 </button>
+                                <button class="btn btn-outline-primary ms-2" id="autoFixBtn">
+                                    <i class="bi bi-robot me-2"></i>
+                                    <span class="btn-text">Attempt Auto-Fix (LLM)</span>
+                                    <span class="loading-spinner">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        Working...
+                                    </span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -249,6 +257,26 @@
             </div>
         </div>
     </div>
+
+        <!-- Auto-Fix Modal -->
+        <div class="modal fade" id="autoFixModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">LLM Proposed Patch</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="patchMeta" class="mb-3"></div>
+                        <pre id="patchContent" style="white-space: pre-wrap; background:#f6f8fa; padding:12px; border-radius:6px; max-height:400px; overflow:auto;"></pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" id="applyPatchBtn">Apply Patch</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     <footer class="bg-dark text-white text-center py-4 mt-5">
         <div class="container">
@@ -616,6 +644,70 @@
             if (e.key === 'Enter') {
                 document.getElementById('fetchBtn').click();
             }
+        });
+
+        // Auto-Fix (LLM) flow
+        document.getElementById('autoFixBtn').addEventListener('click', function() {
+            if (!currentIssueData) {
+                showAlert('No issue data available');
+                return;
+            }
+
+            toggleLoading('autoFixBtn', true);
+
+            fetch('/generate_fix_patch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ issue_data: currentIssueData })
+            })
+            .then(r => r.json())
+            .then(data => {
+                toggleLoading('autoFixBtn', false);
+                if (!data.success) {
+                    showAlert(data.error || 'Auto-fix failed');
+                    return;
+                }
+
+                const result = data.result || {};
+                const patch = result.patch || '';
+                const meta = result.meta || {};
+
+                document.getElementById('patchMeta').textContent = JSON.stringify(meta, null, 2);
+                document.getElementById('patchContent').textContent = patch || 'No patch produced by LLM.';
+                var autoFixModal = new bootstrap.Modal(document.getElementById('autoFixModal'));
+                autoFixModal.show();
+            })
+            .catch(err => {
+                toggleLoading('autoFixBtn', false);
+                showAlert('Auto-fix error: ' + err.message);
+            });
+        });
+
+        // Apply patch button
+        document.getElementById('applyPatchBtn').addEventListener('click', function() {
+            const patch = document.getElementById('patchContent').textContent;
+            if (!patch || patch.trim().length === 0) {
+                showAlert('No patch to apply');
+                return;
+            }
+
+            // Ask user to confirm
+            if (!confirm('Apply the proposed patch to the repository and push?')) return;
+
+            fetch('/apply_patch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patch: patch, commit_message: 'chore: apply LLM-generated patch', issue_data: currentIssueData })
+            })
+            .then(r => r.json())
+            .then(resp => {
+                if (resp.success) {
+                    showAlert('Patch applied and pushed. PR URL: ' + resp.pr_url, 'success');
+                } else {
+                    showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
+                }
+            })
+            .catch(err => showAlert('Apply patch error: ' + err.message));
         });
     </script>
 </body>
