@@ -39,6 +39,36 @@ def index():
     """Main page with the Fetch and Fix Agent interface"""
     return render_template('index.html')
 
+
+@app.route('/pr_wait')
+def pr_wait():
+        """A tiny page shown in the intermediate tab while the PR is being created."""
+        # Keep this simple and self-contained to avoid creating new template files
+        html = """
+        <!doctype html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Creating PR</title>
+            <style>
+                body { font-family: Arial, sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+                .box { text-align:center; padding:20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+                .spinner { width:40px; height:40px; border:4px solid #e9ecef; border-top-color:#0d6efd; border-radius:50%; animation:spin 1s linear infinite; margin: 10px auto; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+            </style>
+        </head>
+        <body>
+            <div class="box">
+                <div class="spinner" aria-hidden="true"></div>
+                <h3>Please wait</h3>
+                <p>Creating pull request — this tab will redirect when the PR is ready.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return html
+
 @app.route('/test_connection', methods=['GET'])
 def test_connection():
     """Test Jira connection"""

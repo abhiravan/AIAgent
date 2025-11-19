@@ -271,9 +271,32 @@
                         <pre id="patchContent" style="white-space: pre-wrap; background:#f6f8fa; padding:12px; border-radius:6px; max-height:400px; overflow:auto;"></pre>
                     </div>
                     <div class="modal-footer">
+                        <div class="form-check me-auto">
+                            <input class="form-check-input" type="checkbox" value="" id="keepOpenCheckbox">
+                            <label class="form-check-label small text-muted" for="keepOpenCheckbox">
+                                Keep modal open until apply completes
+                            </label>
+                        </div>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" class="btn btn-primary" id="applyPatchBtn">Apply Patch</button>
+                        <button type="button" class="btn btn-primary" id="applyPatchBtn">
+                            <span id="applyBtnText">Apply Patch</span>
+                            <span id="applyBtnSpinner" class="spinner-border spinner-border-sm ms-2" role="status" style="display:none"></span>
+                        </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast container for PR link -->
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+            <div id="prToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <strong class="me-auto">Fetch & Fix</strong>
+                    <small class="text-muted">now</small>
+                    <button type="button" class="btn-close ms-2 mb-1" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    <div id="prToastContent">Patch applied and PR created.</div>
                 </div>
             </div>
         </div>
@@ -446,77 +469,7 @@
             });
         });
 
-        // Generate fix and run full auto-fix (generate patch -> apply -> create PR)
-        document.getElementById('applyPatchBtn').addEventListener('click', function() {
-            const patch = document.getElementById('patchContent').textContent || '';
-            if (!patch || patch.trim().length === 0) {
-                showAlert('No patch content available to apply');
-                return;
-            }
-
-            // Close modal immediately for a quick UX response
-            var autoFixModalEl = document.getElementById('autoFixModal');
-            var autoFixModal = bootstrap.Modal.getInstance(autoFixModalEl);
-            if (autoFixModal) autoFixModal.hide();
-
-            // Inform user that the apply request was sent
-            showAlert('Apply request sent. Patch is being applied and a PR will be created. You will be notified when it completes.', 'info');
-
-            // Send apply request asynchronously; UI remains responsive
-            fetch('/apply_patch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ patch: patch, commit_message: `fix(${currentIssueData && currentIssueData.key ? currentIssueData.key : 'AUTO'}): apply LLM patch`, issue_data: currentIssueData })
-            })
-            .then(r => r.json())
-            .then(resp => {
-                if (resp.success) {
-                    const prUrl = resp.pr_url || resp.url;
-                    showAlert('Patch applied and PR created: ' + prUrl, 'success');
-                } else {
-                    showAlert('Failed to apply patch: ' + (resp.error || 'unknown'), 'danger');
-                }
-            })
-            .catch(err => {
-                showAlert('Apply patch error: ' + err.message, 'danger');
-            });
-        });
-                document.getElementById('patchMeta').textContent = JSON.stringify(result.meta || {}, null, 2);
-                document.getElementById('patchContent').textContent = patch;
-                var autoFixModal = new bootstrap.Modal(document.getElementById('autoFixModal'));
-                autoFixModal.show();
-
-                // Step 2: apply patch and create PR (automatic)
-                return fetch('/apply_patch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ patch: patch, commit_message: `fix(${currentIssueData.key || 'AUTO'}): apply LLM patch`, issue_data: currentIssueData })
-                })
-                .then(r2 => r2.json())
-                .then(resp => {
-                    toggleLoading('fixBtn', false);
-                    if (resp.success) {
-                        const prUrl = resp.pr_url || resp.url;
-                        showAlert('Patch applied and PR created: ' + prUrl, 'success');
-                        // update modal with PR link and close modal
-                        document.getElementById('patchMeta').textContent = JSON.stringify({ pr_url: prUrl, branch: resp.branch }, null, 2);
-                        var autoFixModalEl = document.getElementById('autoFixModal');
-                        var autoFixModal = bootstrap.Modal.getInstance(autoFixModalEl);
-                        if (autoFixModal) autoFixModal.hide();
-                    } else {
-                        showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
-                    }
-                })
-                .catch(err => {
-                    toggleLoading('fixBtn', false);
-                    showAlert('Apply patch error: ' + err.message);
-                });
-            })
-            .catch(err => {
-                toggleLoading('fixBtn', false);
-                showAlert('Auto-fix error: ' + err.message);
-            });
-        });
+        // (fixBtn) The modal preview will be shown; Apply button handles apply+PR
 
         // Display AI analysis results
         function displayAIAnalysis(analysis) {
@@ -722,17 +675,30 @@
             });
         });
 
-        // Apply patch button
+        // Apply patch button: support keep-open option, spinner, and show toast with PR link
         document.getElementById('applyPatchBtn').addEventListener('click', function() {
-            const patch = document.getElementById('patchContent').textContent;
+            const patch = document.getElementById('patchContent').textContent || '';
             if (!patch || patch.trim().length === 0) {
                 showAlert('No patch to apply');
                 return;
             }
 
-            // Ask user to confirm
-            if (!confirm('Apply the proposed patch to the repository and push?')) return;
+            const keepOpen = document.getElementById('keepOpenCheckbox').checked;
 
+            // Show spinner on apply button
+            document.getElementById('applyBtnSpinner').style.display = 'inline-block';
+            document.getElementById('applyBtnText').style.opacity = '0.6';
+
+            // If not keeping modal open, close it immediately
+            var autoFixModalEl = document.getElementById('autoFixModal');
+            var autoFixModal = bootstrap.Modal.getInstance(autoFixModalEl);
+            if (!keepOpen && autoFixModal) autoFixModal.hide();
+
+            // Open an intermediate waiting page to avoid popup blockers and show progress
+            var intermediateTab = null;
+            try { intermediateTab = window.open('/pr_wait', '_blank'); } catch (e) { intermediateTab = null; }
+
+            // Fire the apply request
             fetch('/apply_patch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -740,13 +706,78 @@
             })
             .then(r => r.json())
             .then(resp => {
+                // Hide spinner
+                document.getElementById('applyBtnSpinner').style.display = 'none';
+                document.getElementById('applyBtnText').style.opacity = '1';
+
                 if (resp.success) {
-                    showAlert('Patch applied and pushed. PR URL: ' + resp.pr_url, 'success');
+                    const prUrl = resp.pr_url || resp.url;
+                    // Navigate intermediate tab to PR URL (avoids popup blocker)
+                    try {
+                        if (intermediateTab && !intermediateTab.closed) {
+                            intermediateTab.location = prUrl;
+                        } else {
+                            window.open(prUrl, '_blank', 'noopener');
+                        }
+                    } catch (e) {
+                        try { window.open(prUrl, '_blank', 'noopener'); } catch (e2) { /* ignore */ }
+                    }
+
+                    // Show toast with PR link and copy button
+                    const prToastEl = document.getElementById('prToast');
+                    const prToastContent = document.getElementById('prToastContent');
+                    prToastContent.innerHTML = `Patch applied. <a href="${prUrl}" target="_blank" rel="noopener">Open PR</a> <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="prCopyBtn">Copy PR URL</button>`;
+                    var toast = new bootstrap.Toast(prToastEl);
+                    toast.show();
+
+                    // Attach copy-to-clipboard handler
+                    setTimeout(() => {
+                        const copyBtn = document.getElementById('prCopyBtn');
+                        if (copyBtn) {
+                            copyBtn.addEventListener('click', function() {
+                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                    navigator.clipboard.writeText(prUrl).then(() => {
+                                        showAlert('PR URL copied to clipboard', 'success');
+                                    }).catch(err => {
+                                        showAlert('Copy failed: ' + err, 'danger');
+                                    });
+                                } else {
+                                    // Fallback
+                                    const ta = document.createElement('textarea');
+                                    ta.value = prUrl;
+                                    document.body.appendChild(ta);
+                                    ta.select();
+                                    try {
+                                        document.execCommand('copy');
+                                        showAlert('PR URL copied to clipboard', 'success');
+                                    } catch (err) {
+                                        showAlert('Copy failed: ' + err, 'danger');
+                                    }
+                                    ta.remove();
+                                }
+                            });
+                        }
+                    }, 50);
+
+                    // If keepOpen is false, also show an inline success alert
+                    if (!keepOpen) showAlert('Patch applied and PR created: ' + prUrl, 'success');
+                    // If modal was kept open, update meta area with PR info
+                    if (keepOpen) {
+                        document.getElementById('patchMeta').textContent = JSON.stringify({ pr_url: prUrl, branch: resp.branch }, null, 2);
+                    }
                 } else {
-                    showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
+                    // Close intermediate tab if apply failed
+                    try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                    showAlert('Failed to apply patch: ' + (resp.error || 'unknown'), 'danger');
                 }
             })
-            .catch(err => showAlert('Apply patch error: ' + err.message));
+            .catch(err => {
+                document.getElementById('applyBtnSpinner').style.display = 'none';
+                document.getElementById('applyBtnText').style.opacity = '1';
+                // Close intermediate tab on error
+                try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                showAlert('Apply patch error: ' + err.message, 'danger');
+            });
         });
     </script>
 </body>
