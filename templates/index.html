@@ -469,7 +469,124 @@
             });
         });
 
-        // (fixBtn) The modal preview will be shown; Apply button handles apply+PR
+        // Fix Issue button: generate patch, apply it, commit, push, and create PR automatically
+        document.getElementById('fixBtn').addEventListener('click', function() {
+            if (!currentIssueData) {
+                showAlert('No issue data available');
+                return;
+            }
+
+            toggleLoading('fixBtn', true);
+
+            // Open intermediate tab for PR
+            var intermediateTab = null;
+            try { intermediateTab = window.open('/pr_wait', '_blank'); } catch (e) { intermediateTab = null; }
+
+            // Step 1: Generate patch
+            fetch('/generate_fix_patch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ issue_data: currentIssueData })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    toggleLoading('fixBtn', false);
+                    try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                    showAlert(data.error || 'Failed to generate patch');
+                    return;
+                }
+
+                const result = data.result || {};
+                const patch = result.patch || '';
+
+                if (!patch || patch.trim().length === 0) {
+                    toggleLoading('fixBtn', false);
+                    try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                    showAlert('LLM did not produce a patch to apply');
+                    return;
+                }
+
+                // Step 2: Apply patch, commit, push, and create PR
+                return fetch('/apply_patch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        patch: patch, 
+                        commit_message: `fix(${currentIssueData.key || 'AUTO'}): ${currentIssueData.summary || 'apply LLM patch'}`, 
+                        issue_data: currentIssueData 
+                    })
+                })
+                .then(r2 => r2.json())
+                .then(resp => {
+                    toggleLoading('fixBtn', false);
+                    if (resp.success) {
+                        const prUrl = resp.pr_url || resp.url;
+                        
+                        // Navigate intermediate tab to PR URL
+                        try {
+                            if (intermediateTab && !intermediateTab.closed) {
+                                intermediateTab.location = prUrl;
+                            } else {
+                                window.open(prUrl, '_blank', 'noopener');
+                            }
+                        } catch (e) {
+                            try { window.open(prUrl, '_blank', 'noopener'); } catch (e2) {}
+                        }
+
+                        // Show toast with PR link
+                        const prToastEl = document.getElementById('prToast');
+                        const prToastContent = document.getElementById('prToastContent');
+                        prToastContent.innerHTML = `Patch applied and PR created. <a href="${prUrl}" target="_blank" rel="noopener">Open PR</a> <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="prCopyBtn2">Copy PR URL</button>`;
+                        var toast = new bootstrap.Toast(prToastEl);
+                        toast.show();
+
+                        // Copy button handler
+                        setTimeout(() => {
+                            const copyBtn = document.getElementById('prCopyBtn2');
+                            if (copyBtn) {
+                                copyBtn.addEventListener('click', function() {
+                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                        navigator.clipboard.writeText(prUrl).then(() => {
+                                            showAlert('PR URL copied to clipboard', 'success');
+                                        }).catch(err => {
+                                            showAlert('Copy failed: ' + err, 'danger');
+                                        });
+                                    } else {
+                                        const ta = document.createElement('textarea');
+                                        ta.value = prUrl;
+                                        document.body.appendChild(ta);
+                                        ta.select();
+                                        try {
+                                            document.execCommand('copy');
+                                            showAlert('PR URL copied to clipboard', 'success');
+                                        } catch (err) {
+                                            showAlert('Copy failed: ' + err, 'danger');
+                                        }
+                                        ta.remove();
+                                    }
+                                });
+                            }
+                        }, 50);
+
+                        showAlert('Patch applied, committed, and PR created: ' + prUrl, 'success');
+                    } else {
+                        try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                        showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
+                    }
+                })
+                .catch(err => {
+                    toggleLoading('fixBtn', false);
+                    try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                    showAlert('Apply patch error: ' + err.message);
+                });
+            })
+            .catch(err => {
+                toggleLoading('fixBtn', false);
+                try { if (intermediateTab && !intermediateTab.closed) intermediateTab.close(); } catch (e) {}
+                showAlert('Auto-fix error: ' + err.message);
+            });
+        });
 
         // Display AI analysis results
         function displayAIAnalysis(analysis) {
