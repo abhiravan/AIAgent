@@ -18,6 +18,8 @@ from os.path import basename
 from pyspark.sql.functions import substring
 from pyspark.sql import functions as f
 from pyspark.sql.functions import lit
+from pyspark.sql.window import Window
+from pyspark.sql.functions import lead, col
 from pyspark.sql.types import DecimalType
 from decimal import Decimal
 from pyspark.sql.types import IntegerType, StringType,DateType,LongType,DoubleType
@@ -115,6 +117,14 @@ try:
                                 .withColumn("MSGSEQNBR", df["MSGSEQNBR"].cast(IntegerType())) \
                                 .withColumn("TOTALMSGCOUNT", df["TOTALMSGCOUNT"].cast(IntegerType()))
                             
+                            # Add NEXT_PRICE column representing the next price in the audit sequence per product
+                            try:
+                                window_spec = Window.partitionBy("product_id").orderBy("audit_timestamp")
+                                df = df.withColumn("NEXT_PRICE", lead(col("price")).over(window_spec))
+                            except Exception:
+                                # If product_id or audit_timestamp or price columns are not present, continue without NEXT_PRICE
+                                pass
+
                             addDeltaTable("stg_pchg_audit",df,"append")
                         
                         pchg_audit_new_file = 'Y'
