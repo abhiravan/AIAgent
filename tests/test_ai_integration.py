@@ -13,7 +13,7 @@ load_dotenv()
 def test_ai_service():
     """Test the AI service functionality"""
     try:
-        from ai_service import AIService
+        from services.ai_service import AIService
         
         print("🧪 Testing AI Service...")
         ai_service = AIService()
@@ -65,7 +65,7 @@ def test_ai_service():
 def test_github_service():
     """Test the GitHub service functionality"""
     try:
-        from github_service import GitHubService
+        from services.github_service import GitHubService
         
         print("\n🐙 Testing GitHub Service...")
         github_service = GitHubService()

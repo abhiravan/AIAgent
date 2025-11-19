@@ -4,7 +4,7 @@ Fetch and Fix Agent - A web UI for fetching Jira issues and generating fixes
 
 import os
 from flask import Flask, render_template, request, jsonify
-from jira_service import JiraService
+from services.jira_service import JiraService
 from datetime import datetime
 
 app = Flask(__name__)
@@ -74,8 +74,8 @@ def fix_issue():
 def analyze_issue():
     """Analyze issue using AI and GitHub context"""
     try:
-        from ai_service import AIService
-        from github_service import GitHubService
+        from services.ai_service import AIService
+        from services.github_service import GitHubService
         
         data = request.get_json()
         issue_data = data.get('issue_data')
@@ -108,7 +108,7 @@ def analyze_issue():
 def test_github():
     """Test GitHub connection"""
     try:
-        from github_service import GitHubService
+        from services.github_service import GitHubService
         github_service = GitHubService()
         result = github_service.test_connection()
         return jsonify(result)
