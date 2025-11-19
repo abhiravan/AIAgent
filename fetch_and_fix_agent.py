@@ -230,6 +230,31 @@ def apply_patch_route():
                     i += 1
 
             return '\n'.join(out_chunks)
+        # Naive apply helper (used as fallback when git apply fails)
+        def naive_apply(patch: str):
+            changed = []
+            lines = patch.splitlines()
+            i = 0
+            while i < len(lines):
+                if lines[i].startswith('*** Update File:') or lines[i].startswith('*** Add File:'):
+                    parts = lines[i].split(':', 1)
+                    file_path = parts[1].strip()
+                    i += 1
+                    content = []
+                    while i < len(lines) and not lines[i].startswith('***'):
+                        l = lines[i]
+                        if l.startswith('+'):
+                            content.append(l[1:])
+                        elif not l.startswith('-'):
+                            content.append(l)
+                        i += 1
+                    os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(content) + ('\n' if content and not content[-1].endswith('\n') else ''))
+                    changed.append(file_path)
+                else:
+                    i += 1
+            return changed
 
         unified = None
         # If patch already contains a unified diff, use it directly
@@ -243,6 +268,9 @@ def apply_patch_route():
             inner = inner.replace('*** End Patch', '')
             unified = convert_mcp_to_unified(inner)
 
+        # Ensure changed_files is defined on all paths
+        changed_files = []
+
         if unified:
             # Try to apply using git apply
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.diff') as tf:
@@ -253,15 +281,17 @@ def apply_patch_route():
             apply_cmd = f'git apply --index "{diff_path}"'
             res = subprocess.run(apply_cmd, shell=True, cwd=os.getcwd(), capture_output=True, text=True)
             if res.returncode != 0:
-                # fallback to direct write if git apply fails
-                pass
+                # fallback to naive apply if git apply fails
+                try:
+                    changed_files = naive_apply(patch_text)
+                except Exception:
+                    changed_files = []
             else:
                 # Stage and commit all changes applied by git
                 subprocess.run('git add -A', shell=True, cwd=os.getcwd())
                 commit = subprocess.run(f'git commit -m "{commit_message}"', shell=True, cwd=os.getcwd(), capture_output=True, text=True)
                 if commit.returncode != 0:
                     return jsonify({'success': False, 'error': f'git commit failed: {commit.stderr}'})
-                changed_files = []
                 # get list of changed files in this commit
                 diff_names = subprocess.run('git diff --name-only HEAD~1..HEAD', shell=True, cwd=os.getcwd(), capture_output=True, text=True)
                 if diff_names.returncode == 0:
@@ -269,32 +299,7 @@ def apply_patch_route():
                 else:
                     changed_files = []
         else:
-            # No unified diff could be generated; try naive MCP apply (previous approach)
-            def naive_apply(patch: str):
-                changed = []
-                lines = patch.splitlines()
-                i = 0
-                while i < len(lines):
-                    if lines[i].startswith('*** Update File:') or lines[i].startswith('*** Add File:'):
-                        parts = lines[i].split(':', 1)
-                        file_path = parts[1].strip()
-                        i += 1
-                        content = []
-                        while i < len(lines) and not lines[i].startswith('***'):
-                            l = lines[i]
-                            if l.startswith('+'):
-                                content.append(l[1:])
-                            elif not l.startswith('-'):
-                                content.append(l)
-                            i += 1
-                        os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write('\n'.join(content) + ('\n' if content and not content[-1].endswith('\n') else ''))
-                        changed.append(file_path)
-                    else:
-                        i += 1
-                return changed
-
+            # No unified diff could be generated; try naive MCP apply
             changed_files = naive_apply(patch_text)
 
             # Stage and commit the naive-applied files
