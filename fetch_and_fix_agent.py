@@ -138,101 +138,137 @@ def apply_patch_route():
         # Create and switch to the new branch
         subprocess.run(f'git checkout -b {branch_name}', shell=True, cwd=os.getcwd())
 
-        # Parse and apply MCP-style patch blocks (*** Begin Patch / *** Update File: ...)
-        def apply_mcp_patch(patch: str):
-            """Apply an MCP-style patch to the local filesystem.
+        def convert_mcp_to_unified(patch: str) -> str:
+            """Convert MCP-style patch blocks to a unified diff suitable for git apply.
 
-            Returns (success, message, list_of_changed_files)
+            MCP blocks look like:
+            *** Begin Patch
+            *** Update File: path/to/file.py
+            @@
+            -old
+            +new
+            *** End Patch
             """
-            changed_files = []
-            try:
+            out_chunks = []
+            lines = patch.splitlines()
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                if line.startswith('*** Update File:') or line.startswith('*** Add File:') or line.startswith('*** Delete File:'):
+                    op = 'update'
+                    if 'Add File' in line:
+                        op = 'add'
+                    if 'Delete File' in line:
+                        op = 'delete'
+                    parts = line.split(':', 1)
+                    file_path = parts[1].strip() if len(parts) > 1 else None
+                    i += 1
+                    # collect hunk lines until next *** block or end
+                    hunk = []
+                    while i < len(lines) and not lines[i].startswith('***'):
+                        hunk.append(lines[i])
+                        i += 1
+
+                    if not file_path:
+                        continue
+
+                    if op == 'delete':
+                        # create a minimal delete diff
+                        header = f"diff --git a/{file_path} b/{file_path}\nindex e69de29..0000000 100644\n--- a/{file_path}\n+++ /dev/null\n"
+                        out_chunks.append(header + '\n'.join(hunk))
+                        continue
+
+                    # Ensure hunk contains @@ headers; if not, convert +/- block into a single hunk
+                    hunk_text = '\n'.join(hunk)
+                    if '@@' not in hunk_text:
+                        # add a simple hunk header covering full file
+                        header_hunk = '@@ -1,0 +1,0 @@\n'
+                        # Build unified diff body from +/- lines
+                        body = ''
+                        for hl in hunk:
+                            if hl.startswith('+') or hl.startswith('-') or not hl.startswith(' '):
+                                body += hl + '\n'
+                            else:
+                                body += ' ' + hl + '\n'
+                        unified = header_hunk + body
+                    else:
+                        unified = hunk_text
+
+                    header = f"diff --git a/{file_path} b/{file_path}\n--- a/{file_path}\n+++ b/{file_path}\n"
+                    out_chunks.append(header + unified)
+                else:
+                    i += 1
+
+            return '\n'.join(out_chunks)
+
+        unified = None
+        # If patch already contains a unified diff, use it directly
+        if 'diff --git' in patch_text or patch_text.strip().startswith('diff --git'):
+            unified = patch_text
+        elif '*** Begin Patch' in patch_text:
+            # Extract inner content
+            # remove Begin/End markers if present
+            inner = patch_text
+            inner = inner.replace('*** Begin Patch', '')
+            inner = inner.replace('*** End Patch', '')
+            unified = convert_mcp_to_unified(inner)
+
+        if unified:
+            # Try to apply using git apply
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.diff') as tf:
+                tf.write(unified)
+                tf.flush()
+                diff_path = tf.name
+
+            apply_cmd = f'git apply --index "{diff_path}"'
+            res = subprocess.run(apply_cmd, shell=True, cwd=os.getcwd(), capture_output=True, text=True)
+            if res.returncode != 0:
+                # fallback to direct write if git apply fails
+                pass
+            else:
+                # Stage and commit all changes applied by git
+                subprocess.run('git add -A', shell=True, cwd=os.getcwd())
+                commit = subprocess.run(f'git commit -m "{commit_message}"', shell=True, cwd=os.getcwd(), capture_output=True, text=True)
+                if commit.returncode != 0:
+                    return jsonify({'success': False, 'error': f'git commit failed: {commit.stderr}'})
+                changed_files = []
+                # get list of changed files in this commit
+                diff_names = subprocess.run('git diff --name-only HEAD~1..HEAD', shell=True, cwd=os.getcwd(), capture_output=True, text=True)
+                if diff_names.returncode == 0:
+                    changed_files = [n for n in diff_names.stdout.splitlines() if n.strip()]
+                else:
+                    changed_files = []
+        else:
+            # No unified diff could be generated; try naive MCP apply (previous approach)
+            def naive_apply(patch: str):
+                changed = []
                 lines = patch.splitlines()
                 i = 0
                 while i < len(lines):
-                    line = lines[i]
-                    if line.startswith('*** Update File:') or line.startswith('*** Add File:'):
-                        mode = 'update' if 'Update' in line else 'add'
-                        # extract path
-                        parts = line.split(':', 1)
-                        if len(parts) < 2:
-                            return False, f'Malformed patch header: {line}', []
+                    if lines[i].startswith('*** Update File:') or lines[i].startswith('*** Add File:'):
+                        parts = lines[i].split(':', 1)
                         file_path = parts[1].strip()
                         i += 1
-
-                        # skip optional @@ headers until we hit diff content or next block
-                        hunk_lines = []
+                        content = []
                         while i < len(lines) and not lines[i].startswith('***'):
-                            hunk_lines.append(lines[i])
+                            l = lines[i]
+                            if l.startswith('+'):
+                                content.append(l[1:])
+                            elif not l.startswith('-'):
+                                content.append(l)
                             i += 1
-
-                        # If adding file, write the content from hunk_lines (strip leading +/- if present)
-                        if mode == 'add':
-                            content_lines = []
-                            for hl in hunk_lines:
-                                if hl.startswith('+'):
-                                    content_lines.append(hl[1:])
-                                elif not hl.startswith('-'):
-                                    content_lines.append(hl)
-                            # ensure directory exists
-                            os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
-                            with open(file_path, 'w', encoding='utf-8') as f:
-                                f.write('\n'.join(content_lines) + ('\n' if content_lines and not content_lines[-1].endswith('\n') else ''))
-                            changed_files.append(file_path)
-                            continue
-
-                        # For update, apply a simple patch: read original, then process hunk lines
-                        if not os.path.exists(file_path):
-                            orig_lines = []
-                        else:
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                orig_lines = f.read().splitlines()
-
-                        out_lines = []
-                        orig_idx = 0
-
-                        for hl in hunk_lines:
-                            if hl.startswith('@@'):
-                                # hunk header, skip
-                                continue
-                            if hl.startswith('-'):
-                                # remove line from original: advance orig_idx by 1
-                                orig_idx += 1
-                            elif hl.startswith('+'):
-                                out_lines.append(hl[1:])
-                            else:
-                                # context line: keep and advance original
-                                out_lines.append(hl)
-                                orig_idx += 1
-
-                        # If nothing in out_lines but we have orig_lines, fallback to original
-                        if not out_lines and orig_lines:
-                            new_content = '\n'.join(orig_lines)
-                        else:
-                            new_content = '\n'.join(out_lines)
-
-                        # Write back
                         os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
                         with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(new_content + ('\n' if new_content and not new_content.endswith('\n') else ''))
-                        changed_files.append(file_path)
+                            f.write('\n'.join(content) + ('\n' if content and not content[-1].endswith('\n') else ''))
+                        changed.append(file_path)
                     else:
                         i += 1
+                return changed
 
-                return True, 'Patch applied', changed_files
-            except Exception as e:
-                return False, str(e), []
+            changed_files = naive_apply(patch_text)
 
-        success, msg, changed_files = apply_mcp_patch(patch_text)
-        if not success:
-            return jsonify({'success': False, 'error': 'Patch application failed: ' + msg})
-
-        # Stage and commit changed files
-        if changed_files:
-            subprocess.run('git add ' + ' '.join([shlex.quote(f) for f in changed_files]), shell=True, cwd=os.getcwd())
-            subprocess.run(f'git commit -m "{commit_message}"', shell=True, cwd=os.getcwd())
-        else:
-            # Nothing changed
-            return jsonify({'success': False, 'error': 'No files were changed by the patch.'})
+        if not changed_files:
+            return jsonify({'success': False, 'error': 'No files were changed by the patch or git apply failed.'})
 
         # Push branch
         push_res = subprocess.run(f'git push -u origin {branch_name}', shell=True, cwd=os.getcwd(), capture_output=True, text=True)

@@ -496,8 +496,11 @@
                     if (resp.success) {
                         const prUrl = resp.pr_url || resp.url;
                         showAlert('Patch applied and PR created: ' + prUrl, 'success');
-                        // update modal with PR link
+                        // update modal with PR link and close modal
                         document.getElementById('patchMeta').textContent = JSON.stringify({ pr_url: prUrl, branch: resp.branch }, null, 2);
+                        var autoFixModalEl = document.getElementById('autoFixModal');
+                        var autoFixModal = bootstrap.Modal.getInstance(autoFixModalEl);
+                        if (autoFixModal) autoFixModal.hide();
                     } else {
                         showAlert('Failed to apply patch: ' + (resp.error || 'unknown'));
                     }
