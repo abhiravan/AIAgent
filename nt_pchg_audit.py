@@ -1,3 +1,4 @@
+# [AG-4] Issue: Create a new column NEXT_PRICE for price change audit integration. - Root cause: The root cause is that the current price change audit DataFrame and related data structures in nt_pc
 # Databricks notebook source
 # MAGIC %run "../General/nt_user_defined_methods"
 
