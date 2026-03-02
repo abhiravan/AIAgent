@@ -1,3 +1,4 @@
+# [AG-5] Issue: Remove NEXT_PRICE from price change audit integration - Root cause: The root cause is that the NEXT_PRICE field is still being included in the price change audit integr
 # [AG-4] Issue: Create a new column NEXT_PRICE for price change audit integration - Root cause: The existing database schema and related application code do not have a NEXT_PRICE column to track t
 # [AG-4] Issue: Create a new column NEXT_PRICE for price change audit integration - Root cause: The root cause is the absence of a NEXT_PRICE column in the relevant database table(s) that store pr
 # Databricks notebook source
